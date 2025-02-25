@@ -31,6 +31,7 @@ class pygma:
         self.frame_vars = {}
         self.generated_code = ""
         self.selected_frames = []
+        self.generated_elements = []  # Reset for code generation
 
     def fetch_design(self):
         """Fetches design data from Figma API"""
@@ -107,48 +108,67 @@ class pygma:
         ui_window = tk.Toplevel(self.master)
         ui_window.title("Generated Tkinter UI")
 
+        # Create a canvas to hold the design
         canvas = tk.Canvas(ui_window, width=800, height=600, bg="white")
         canvas.pack(fill="both", expand=True)
 
-        self.generated_elements = []
+        self.generated_elements = []  # Reset before generating
 
+        # For each selected frame, create its container and children
         for frame_name in self.selected_frames:
             frame = self.frames.get(frame_name)
             if frame:
-                self.create_widgets_from_nodes(frame, canvas)
+                self.create_widgets_from_nodes(frame, canvas, offset_x=0, offset_y=0)
 
         self.generated_code = self.build_generated_code()
         self.export_button.config(state="normal")
 
-    def create_widgets_from_nodes(self, node, parent):
-        """Creates UI elements from Figma nodes"""
+    def create_widgets_from_nodes(self, node, parent, offset_x=0, offset_y=0):
+        """Creates UI elements from Figma nodes with coordinate adjustment"""
+        abs_bb = node.get("absoluteBoundingBox", {})
+        x = int(abs_bb.get("x", 0))
+        y = int(abs_bb.get("y", 0))
+        width = int(abs_bb.get("width", 100))
+        height = int(abs_bb.get("height", 50))
+        # Compute local coordinates relative to the parent's origin
+        local_x = x - offset_x
+        local_y = y - offset_y
+
         node_type = node.get("type", "")
-        name = node.get("name", "Unnamed")
-        x, y = int(node.get("absoluteBoundingBox", {}).get("x", 0)), int(node.get("absoluteBoundingBox", {}).get("y", 0))
-        width, height = int(node.get("absoluteBoundingBox", {}).get("width", 100)), int(node.get("absoluteBoundingBox", {}).get("height", 50))
-
-        if node_type == "TEXT":
-            widget = tk.Label(parent, text=name, font=("Arial", 12), bg="white")
-            widget.place(x=x, y=y, width=width, height=height)
-            self.generated_elements.append((name, "Label", x, y, width, height))
-
+        
+        if node_type == "FRAME":
+            # Create a container to represent the frame.
+            # Use a light border to visually differentiate the frame.
+            bg_color = "white"  # Adjust if Figma design provides a specific background
+            frame_container = tk.Frame(parent, width=width, height=height, bg=bg_color, 
+                                       highlightbackground="black", highlightthickness=1)
+            frame_container.place(x=local_x, y=local_y, width=width, height=height)
+            # Process children with this frame's top-left as the new offset.
+            for child in node.get("children", []):
+                self.create_widgets_from_nodes(child, frame_container, offset_x=x, offset_y=y)
+        elif node_type == "TEXT":
+            # Use the 'characters' property if available, otherwise fallback to name.
+            text_content = node.get("characters", node.get("name", "Text"))
+            widget = tk.Label(parent, text=text_content, font=("Arial", 12), bg="white")
+            widget.place(x=local_x, y=local_y, width=width, height=height)
+            self.generated_elements.append((node.get("name", "Label"), "Label", local_x, local_y, width, height))
         elif node_type == "RECTANGLE":
-            widget = tk.Canvas(parent, width=width, height=height, bg="gray")
-            widget.place(x=x, y=y, width=width, height=height)
-            self.generated_elements.append((name, "Canvas", x, y, width, height))
-
+            # Represent rectangles as frames with a default gray background.
+            widget = tk.Frame(parent, bg="gray")
+            widget.place(x=local_x, y=local_y, width=width, height=height)
+            self.generated_elements.append((node.get("name", "Rectangle"), "Frame", local_x, local_y, width, height))
         elif node_type == "BUTTON":
-            widget = tk.Button(parent, text=name)
-            widget.place(x=x, y=y, width=width, height=height)
-            self.generated_elements.append((name, "Button", x, y, width, height))
-
+            widget = tk.Button(parent, text=node.get("name", "Button"))
+            widget.place(x=local_x, y=local_y, width=width, height=height)
+            self.generated_elements.append((node.get("name", "Button"), "Button", local_x, local_y, width, height))
         elif node_type == "INPUT":
             widget = tk.Entry(parent)
-            widget.place(x=x, y=y, width=width, height=height)
-            self.generated_elements.append((name, "Entry", x, y, width, height))
-
-        for child in node.get("children", []):
-            self.create_widgets_from_nodes(child, parent)
+            widget.place(x=local_x, y=local_y, width=width, height=height)
+            self.generated_elements.append((node.get("name", "Entry"), "Entry", local_x, local_y, width, height))
+        else:
+            # For any other type, just process its children.
+            for child in node.get("children", []):
+                self.create_widgets_from_nodes(child, parent, offset_x, offset_y)
 
     def build_generated_code(self):
         """Generates Python code representing the Tkinter UI"""
@@ -156,8 +176,8 @@ class pygma:
         for name, widget_type, x, y, width, height in self.generated_elements:
             if widget_type == "Label":
                 code += f'    tk.Label(root, text="{name}", font=("Arial", 12)).place(x={x}, y={y}, width={width}, height={height})\n'
-            elif widget_type == "Canvas":
-                code += f'    tk.Canvas(root, width={width}, height={height}, bg="gray").place(x={x}, y={y})\n'
+            elif widget_type == "Frame":
+                code += f'    tk.Frame(root, bg="gray").place(x={x}, y={y}, width={width}, height={height})\n'
             elif widget_type == "Button":
                 code += f'    tk.Button(root, text="{name}").place(x={x}, y={y}, width={width}, height={height})\n'
             elif widget_type == "Entry":
