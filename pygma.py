@@ -20,21 +20,18 @@ class pygma:
         self.fetch_button = tk.Button(master, text="Fetch Design", command=self.fetch_design)
         self.fetch_button.grid(row=2, column=0, columnspan=2, pady=10)
         
-        # Container for displaying detected frames
-        self.frames_frame = tk.LabelFrame(master, text="Detected Frames", padx=10, pady=10)
-        self.frames_frame.grid(row=3, column=0, columnspan=2, padx=10, pady=10, sticky="we")
-        
         # Buttons for generating UI and exporting code
         self.generate_button = tk.Button(master, text="Generate UI", command=self.generate_ui, state="disabled")
-        self.generate_button.grid(row=4, column=0, pady=10)
+        self.generate_button.grid(row=3, column=0, pady=10)
         self.export_button = tk.Button(master, text="Export Code", command=self.export_code, state="disabled")
-        self.export_button.grid(row=4, column=1, pady=10)
+        self.export_button.grid(row=3, column=1, pady=10)
         
         # Internal storage for design data and frame selection
         self.design_data = None
         self.frames = {}
         self.frame_vars = {}
         self.generated_code = ""
+        self.frame_selector_window = None  # Will hold our frame selection window
     
     def fetch_design(self):
         token = self.token_entry.get().strip()
@@ -54,7 +51,7 @@ class pygma:
                 return
             self.design_data = response.json()
             self.extract_frames()
-            self.show_frames()
+            self.open_frame_selector()
             self.generate_button.config(state="normal")
             messagebox.showinfo("Success", "Design data fetched and frames extracted!")
         except Exception as e:
@@ -74,21 +71,25 @@ class pygma:
         
         document = self.design_data.get("document", {})
         traverse(document)
+        print("Extracted frames:", list(self.frames.keys()))
     
-    def show_frames(self):
-        # Clear previous widgets in the frames container
-        for widget in self.frames_frame.winfo_children():
-            widget.destroy()
+    def open_frame_selector(self):
+        # If the frame selector window is already open, destroy it
+        if self.frame_selector_window:
+            self.frame_selector_window.destroy()
+        
+        self.frame_selector_window = tk.Toplevel(self.master)
+        self.frame_selector_window.title("Select Frames")
+        
+        tk.Label(self.frame_selector_window, text="Select Frames to include in your UI:", font=("Arial", 12)).pack(padx=10, pady=10)
         
         self.frame_vars = {}
-        row = 0
         for frame_name in self.frames:
             var = tk.BooleanVar()
-            chk = tk.Checkbutton(self.frames_frame, text=frame_name, variable=var)
-            chk.grid(row=row, column=0, sticky="w")
+            chk = tk.Checkbutton(self.frame_selector_window, text=frame_name, variable=var)
+            chk.pack(anchor="w", padx=10)
             self.frame_vars[frame_name] = var
-            row += 1
-    
+        
     def generate_ui(self):
         # Gather the selected frames from the checkboxes
         selected_frames = [name for name, var in self.frame_vars.items() if var.get()]
