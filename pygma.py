@@ -2,10 +2,10 @@ import tkinter as tk
 from tkinter import messagebox, filedialog
 import requests
 
-class Figma2TkApp:
+class pygma:
     def __init__(self, master):
         self.master = master
-        self.master.title("Figma2Tk - Convert Figma Designs to Tkinter GUIs")
+        self.master.title("pygma - Convert Figma Designs to Tkinter GUIs")
         
         # Input fields for Figma API token and File ID
         tk.Label(master, text="Figma API Token:").grid(row=0, column=0, sticky="e", padx=5, pady=5)
@@ -152,5 +152,5 @@ if __name__ == "__main__":
 
 if __name__ == "__main__":
     root = tk.Tk()
-    app = Figma2TkApp(root)
+    app = pygma(root)
     root.mainloop()
