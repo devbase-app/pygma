@@ -30,7 +30,7 @@ class pygma:
         self.frames = {}
         self.frame_vars = {}
         self.generated_code = ""
-        self.selected_nodes = []
+        self.selected_frames = []
 
     def fetch_design(self):
         """Fetches design data from Figma API"""
@@ -51,13 +51,13 @@ class pygma:
                 return
             self.design_data = response.json()
             self.extract_frames()
-            self.generate_button.config(state="normal")
-            messagebox.showinfo("Success", "Design data fetched and frames extracted!")
+            self.open_frame_selector()
+            messagebox.showinfo("Success", "Design data fetched successfully!")
         except Exception as e:
             messagebox.showerror("Error", f"An error occurred: {str(e)}")
 
     def extract_frames(self):
-        """Extracts frames and their child elements from the design"""
+        """Extracts frames from the design data"""
         self.frames = {}
 
         def traverse(node):
@@ -69,10 +69,39 @@ class pygma:
         document = self.design_data.get("document", {})
         traverse(document)
 
+    def open_frame_selector(self):
+        """Opens a selection window for choosing frames"""
+        if hasattr(self, 'frame_selector_window') and self.frame_selector_window:
+            self.frame_selector_window.destroy()
+
+        self.frame_selector_window = tk.Toplevel(self.master)
+        self.frame_selector_window.title("Select Frames")
+
+        tk.Label(self.frame_selector_window, text="Select Frames:", font=("Arial", 12)).pack(pady=10)
+
+        self.frame_vars = {}
+        for frame_name in self.frames:
+            var = tk.BooleanVar()
+            chk = tk.Checkbutton(self.frame_selector_window, text=frame_name, variable=var)
+            chk.pack(anchor="w", padx=10)
+            self.frame_vars[frame_name] = var
+
+        tk.Button(self.frame_selector_window, text="Confirm", command=self.confirm_frame_selection).pack(pady=10)
+
+    def confirm_frame_selection(self):
+        """Stores selected frames and enables UI generation"""
+        self.selected_frames = [name for name, var in self.frame_vars.items() if var.get()]
+        if not self.selected_frames:
+            messagebox.showwarning("No Selection", "Please select at least one frame.")
+            return
+
+        self.generate_button.config(state="normal")
+        self.frame_selector_window.destroy()
+
     def generate_ui(self):
-        """Generates a Tkinter UI based on selected Figma frames"""
-        if not self.frames:
-            messagebox.showerror("Error", "No frames detected.")
+        """Generates Tkinter UI based on selected Figma frames"""
+        if not self.selected_frames:
+            messagebox.showerror("Error", "No frames selected.")
             return
         
         ui_window = tk.Toplevel(self.master)
@@ -81,10 +110,12 @@ class pygma:
         canvas = tk.Canvas(ui_window, width=800, height=600, bg="white")
         canvas.pack(fill="both", expand=True)
 
-        self.selected_nodes = []
+        self.generated_elements = []
 
-        for frame_name, frame in self.frames.items():
-            self.create_widgets_from_nodes(frame, canvas)
+        for frame_name in self.selected_frames:
+            frame = self.frames.get(frame_name)
+            if frame:
+                self.create_widgets_from_nodes(frame, canvas)
 
         self.generated_code = self.build_generated_code()
         self.export_button.config(state="normal")
@@ -99,30 +130,30 @@ class pygma:
         if node_type == "TEXT":
             widget = tk.Label(parent, text=name, font=("Arial", 12), bg="white")
             widget.place(x=x, y=y, width=width, height=height)
-            self.selected_nodes.append((name, "Label", x, y, width, height))
+            self.generated_elements.append((name, "Label", x, y, width, height))
 
         elif node_type == "RECTANGLE":
             widget = tk.Canvas(parent, width=width, height=height, bg="gray")
             widget.place(x=x, y=y, width=width, height=height)
-            self.selected_nodes.append((name, "Canvas", x, y, width, height))
+            self.generated_elements.append((name, "Canvas", x, y, width, height))
 
         elif node_type == "BUTTON":
             widget = tk.Button(parent, text=name)
             widget.place(x=x, y=y, width=width, height=height)
-            self.selected_nodes.append((name, "Button", x, y, width, height))
+            self.generated_elements.append((name, "Button", x, y, width, height))
 
         elif node_type == "INPUT":
             widget = tk.Entry(parent)
             widget.place(x=x, y=y, width=width, height=height)
-            self.selected_nodes.append((name, "Entry", x, y, width, height))
+            self.generated_elements.append((name, "Entry", x, y, width, height))
 
         for child in node.get("children", []):
             self.create_widgets_from_nodes(child, parent)
 
     def build_generated_code(self):
-        """Builds Python code representing the generated Tkinter UI"""
+        """Generates Python code representing the Tkinter UI"""
         code = '''import tkinter as tk\n\ndef create_ui():\n    root = tk.Tk()\n    root.title("Auto-generated UI")\n'''
-        for name, widget_type, x, y, width, height in self.selected_nodes:
+        for name, widget_type, x, y, width, height in self.generated_elements:
             if widget_type == "Label":
                 code += f'    tk.Label(root, text="{name}", font=("Arial", 12)).place(x={x}, y={y}, width={width}, height={height})\n'
             elif widget_type == "Canvas":
