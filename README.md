@@ -30,7 +30,7 @@ pip install requests tkinter
 Clone or download this repository:
 
 ```
-git clone https://github.com/your-repo/pygma.git
+git clone https://github.com/devbase-app/pygma.git
 cd pygma
 ```
 
