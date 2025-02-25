@@ -32,7 +32,7 @@ Installation
 Clone the Repository:
 
 ```
-git clone https://github.com/yourusername/pygma.git
+git clone https://github.com/devbase-app/pygma.git
 cd pygma
 ```
 
