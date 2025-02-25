@@ -31,7 +31,7 @@ class pygma:
         self.frames = {}
         self.frame_vars = {}
         self.generated_code = ""
-        self.frame_selector_window = None  # Will hold our frame selection window
+        self.frame_selector_window = None
     
     def fetch_design(self):
         token = self.token_entry.get().strip()
@@ -51,30 +51,32 @@ class pygma:
                 return
             self.design_data = response.json()
             self.extract_frames()
-            self.open_frame_selector()
-            self.generate_button.config(state="normal")
-            messagebox.showinfo("Success", "Design data fetched and frames extracted!")
+            
+            if self.frames:
+                self.open_frame_selector()
+                self.generate_button.config(state="normal")
+                messagebox.showinfo("Success", "Design data fetched and frames extracted!")
+            else:
+                messagebox.showwarning("No Frames Found", "No frames were detected in the Figma file.")
         except Exception as e:
-            messagebox.showerror("Error", f"An error occurred: {str(e)}")
+            messagebox.showerror("Error", f"An error occurred: {str(e)}")  
     
     def extract_frames(self):
-        # Clear previously stored frames
         self.frames = {}
         
         def traverse(node):
             if node.get("type") == "FRAME":
-                # Use the frame's name (or "Unnamed Frame" if missing)
                 name = node.get("name", "Unnamed Frame")
                 self.frames[name] = node
             for child in node.get("children", []):
                 traverse(child)
         
-        document = self.design_data.get("document", {})
-        traverse(document)
+        document = self.design_data.get("document", {}).get("children", [])
+        for child in document:
+            traverse(child)
         print("Extracted frames:", list(self.frames.keys()))
     
     def open_frame_selector(self):
-        # If the frame selector window is already open, destroy it
         if self.frame_selector_window:
             self.frame_selector_window.destroy()
         
@@ -89,15 +91,13 @@ class pygma:
             chk = tk.Checkbutton(self.frame_selector_window, text=frame_name, variable=var)
             chk.pack(anchor="w", padx=10)
             self.frame_vars[frame_name] = var
-        
+    
     def generate_ui(self):
-        # Gather the selected frames from the checkboxes
         selected_frames = [name for name, var in self.frame_vars.items() if var.get()]
         if not selected_frames:
             messagebox.showwarning("No Selection", "Please select at least one frame to generate the UI.")
             return
         
-        # Open a new window to display the generated UI
         ui_window = tk.Toplevel(self.master)
         ui_window.title("Generated Tkinter UI")
         
@@ -107,13 +107,11 @@ class pygma:
             label = tk.Label(frame, text=frame_name, font=("Arial", 16))
             label.pack()
         
-        # Build the code string for export
         self.generated_code = self.build_generated_code(selected_frames)
         messagebox.showinfo("UI Generated", "UI generated successfully! You can now export the code.")
         self.export_button.config(state="normal")
     
     def build_generated_code(self, selected_frames):
-        # Construct a Python script reproducing the generated UI
         code = '''import tkinter as tk
 
 def create_ui():
@@ -141,7 +139,6 @@ if __name__ == "__main__":
             messagebox.showerror("Export Error", "No generated code to export.")
             return
         
-        # Open a file dialog to choose where to save the Python file
         file_path = filedialog.asksaveasfilename(defaultextension=".py", filetypes=[("Python files", "*.py")])
         if file_path:
             try:
