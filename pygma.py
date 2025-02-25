@@ -31,7 +31,7 @@ class pygma:
         self.frame_vars = {}
         self.generated_code = ""
         self.selected_frames = []
-        self.generated_elements = []  # Reset for code generation
+        self.generated_elements = []  # For code generation
 
     def fetch_design(self):
         """Fetches design data from Figma API"""
@@ -100,60 +100,81 @@ class pygma:
         self.frame_selector_window.destroy()
 
     def generate_ui(self):
-        """Generates Tkinter UI based on selected Figma frames"""
+        """Generates Tkinter UI based on selected Figma frames,
+           sizing the window to the design and adjusting widget positions accordingly."""
         if not self.selected_frames:
             messagebox.showerror("Error", "No frames selected.")
             return
+
+        # Calculate the global bounding box for all selected frames
+        global_min_x, global_min_y = float('inf'), float('inf')
+        global_max_x, global_max_y = 0, 0
         
-        ui_window = tk.Toplevel(self.master)
-        ui_window.title("Generated Tkinter UI")
-
-        # Create a canvas to hold the design
-        canvas = tk.Canvas(ui_window, width=800, height=600, bg="white")
-        canvas.pack(fill="both", expand=True)
-
-        self.generated_elements = []  # Reset before generating
-
-        # For each selected frame, create its container and children
         for frame_name in self.selected_frames:
             frame = self.frames.get(frame_name)
             if frame:
-                self.create_widgets_from_nodes(frame, canvas, offset_x=0, offset_y=0)
+                bb = frame.get("absoluteBoundingBox", {})
+                x = int(bb.get("x", 0))
+                y = int(bb.get("y", 0))
+                w = int(bb.get("width", 100))
+                h = int(bb.get("height", 50))
+                global_min_x = min(global_min_x, x)
+                global_min_y = min(global_min_y, y)
+                global_max_x = max(global_max_x, x + w)
+                global_max_y = max(global_max_y, y + h)
+        
+        canvas_width = global_max_x - global_min_x
+        canvas_height = global_max_y - global_min_y
 
+        ui_window = tk.Toplevel(self.master)
+        ui_window.title("Generated Tkinter UI")
+        ui_window.geometry(f"{canvas_width}x{canvas_height}")
+
+        canvas = tk.Canvas(ui_window, width=canvas_width, height=canvas_height, bg="white")
+        canvas.pack(fill="both", expand=True)
+
+        self.generated_elements = []  # Reset before generation
+
+        # Use the global minimum as the offset so the design aligns to (0,0)
+        for frame_name in self.selected_frames:
+            frame = self.frames.get(frame_name)
+            if frame:
+                self.create_widgets_from_nodes(frame, canvas, (global_min_x, global_min_y))
+        
         self.generated_code = self.build_generated_code()
         self.export_button.config(state="normal")
 
-    def create_widgets_from_nodes(self, node, parent, offset_x=0, offset_y=0):
-        """Creates UI elements from Figma nodes with coordinate adjustment"""
+    def create_widgets_from_nodes(self, node, parent, base_offset):
+        """
+        Creates UI elements from Figma nodes with coordinate adjustment.
+        base_offset is a tuple (offset_x, offset_y) used to normalize coordinates.
+        """
         abs_bb = node.get("absoluteBoundingBox", {})
-        x = int(abs_bb.get("x", 0))
-        y = int(abs_bb.get("y", 0))
+        node_abs_x = int(abs_bb.get("x", 0))
+        node_abs_y = int(abs_bb.get("y", 0))
         width = int(abs_bb.get("width", 100))
         height = int(abs_bb.get("height", 50))
-        # Compute local coordinates relative to the parent's origin
-        local_x = x - offset_x
-        local_y = y - offset_y
+        local_x = node_abs_x - base_offset[0]
+        local_y = node_abs_y - base_offset[1]
 
         node_type = node.get("type", "")
-        
         if node_type == "FRAME":
-            # Create a container to represent the frame.
-            # Use a light border to visually differentiate the frame.
-            bg_color = "white"  # Adjust if Figma design provides a specific background
-            frame_container = tk.Frame(parent, width=width, height=height, bg=bg_color, 
+            # Create a container frame for the Figma frame
+            bg_color = "white"  # Default background; adjust if design specifies otherwise
+            frame_container = tk.Frame(parent, width=width, height=height, bg=bg_color,
                                        highlightbackground="black", highlightthickness=1)
             frame_container.place(x=local_x, y=local_y, width=width, height=height)
-            # Process children with this frame's top-left as the new offset.
+            self.generated_elements.append((node.get("name", "Frame"), "Frame", local_x, local_y, width, height))
+            # For children, use this node's absolute position as the new base offset
+            new_base_offset = (node_abs_x, node_abs_y)
             for child in node.get("children", []):
-                self.create_widgets_from_nodes(child, frame_container, offset_x=x, offset_y=y)
+                self.create_widgets_from_nodes(child, frame_container, new_base_offset)
         elif node_type == "TEXT":
-            # Use the 'characters' property if available, otherwise fallback to name.
             text_content = node.get("characters", node.get("name", "Text"))
             widget = tk.Label(parent, text=text_content, font=("Arial", 12), bg="white")
             widget.place(x=local_x, y=local_y, width=width, height=height)
             self.generated_elements.append((node.get("name", "Label"), "Label", local_x, local_y, width, height))
         elif node_type == "RECTANGLE":
-            # Represent rectangles as frames with a default gray background.
             widget = tk.Frame(parent, bg="gray")
             widget.place(x=local_x, y=local_y, width=width, height=height)
             self.generated_elements.append((node.get("name", "Rectangle"), "Frame", local_x, local_y, width, height))
@@ -166,12 +187,12 @@ class pygma:
             widget.place(x=local_x, y=local_y, width=width, height=height)
             self.generated_elements.append((node.get("name", "Entry"), "Entry", local_x, local_y, width, height))
         else:
-            # For any other type, just process its children.
+            # For any other node type, process its children using the same base offset
             for child in node.get("children", []):
-                self.create_widgets_from_nodes(child, parent, offset_x, offset_y)
+                self.create_widgets_from_nodes(child, parent, base_offset)
 
     def build_generated_code(self):
-        """Generates Python code representing the Tkinter UI"""
+        """Generates Python code representing the Tkinter UI based on generated elements."""
         code = '''import tkinter as tk\n\ndef create_ui():\n    root = tk.Tk()\n    root.title("Auto-generated UI")\n'''
         for name, widget_type, x, y, width, height in self.generated_elements:
             if widget_type == "Label":
@@ -187,7 +208,7 @@ class pygma:
         return code
 
     def export_code(self):
-        """Exports the generated Tkinter code to a .py file"""
+        """Exports the generated Tkinter code to a .py file."""
         if not self.generated_code:
             messagebox.showerror("Export Error", "No generated code to export.")
             return
