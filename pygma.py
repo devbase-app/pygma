@@ -169,11 +169,17 @@ class pygma:
             new_base_offset = (node_abs_x, node_abs_y)
             for child in node.get("children", []):
                 self.create_widgets_from_nodes(child, frame_container, new_base_offset)
+        # Check if the text node should be an input field (using a naming convention)    
         elif node_type == "TEXT":
-            text_content = node.get("characters", node.get("name", "Text"))
-            widget = tk.Label(parent, text=text_content, font=("Arial", 12), bg="white")
-            widget.place(x=local_x, y=local_y, width=width, height=height)
-            self.generated_elements.append((node.get("name", "Label"), "Label", local_x, local_y, width, height))
+            if "input" in node.get("name", "").lower():
+                widget = tk.Entry(parent)
+                widget.place(x=local_x, y=local_y, width=width, height=height)
+                self.generated_elements.append((node.get("name", "Entry"), "Entry", local_x, local_y, width, height))
+            else:
+                text_content = node.get("characters", node.get("name", "Text"))
+                widget = tk.Label(parent, text=text_content, font=("Arial", 12), bg="white")
+                widget.place(x=local_x, y=local_y, width=width, height=height)
+                self.generated_elements.append((node.get("name", "Label"), "Label", local_x, local_y, width, height))
         elif node_type == "RECTANGLE":
             widget = tk.Frame(parent, bg="gray")
             widget.place(x=local_x, y=local_y, width=width, height=height)
