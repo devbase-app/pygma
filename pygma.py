@@ -33,6 +33,11 @@ class pygma:
         self.selected_frames = []
         self.generated_elements = []  # For code generation
 
+        # Add responsive layout feature to adapt UI elements when the window is resized.
+        self.master.bind("<Configure>", self.on_resize)
+        self.original_width = self.master.winfo_width()
+        self.original_height = self.master.winfo_height()
+
     def fetch_design(self):
         """Fetches design data from Figma API"""
         token = self.token_entry.get().strip()
@@ -166,7 +171,7 @@ class pygma:
             text_content = node.get("characters", "")
             print(f"Text content: {text_content}")
             if "input" in node_name:
-                widget = tk.Entry(parent)
+                widget = tk.Entry(parent, bd=0)
                 widget.insert(0, text_content)
                 widget.place(x=local_x, y=local_y, width=width, height=height)
                 self.generated_elements.append((node_name, "Entry", local_x, local_y, width, height))
@@ -257,6 +262,22 @@ if __name__ == "__main__":
             with open(file_path, "w") as f:
                 f.write(self.generated_code)
             messagebox.showinfo("Export Successful", "Code saved!")
+
+    def on_resize(self, event):
+        new_width = event.width
+        new_height = event.height
+        width_ratio = new_width / self.original_width
+        height_ratio = new_height / self.original_height
+        for element in self.generated_elements:
+            name, widget_type, x, y, width, height = element
+            new_x = int(x * width_ratio)
+            new_y = int(y * height_ratio)
+            new_width = int(width * width_ratio)
+            new_height = int(height * height_ratio)
+            widget = self.master.nametowidget(name)
+            widget.place(x=new_x, y=new_y, width=new_width, height=new_height)
+        self.original_width = new_width
+        self.original_height = new_height
 
 if __name__ == "__main__":
     root = tk.Tk()
